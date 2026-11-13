@@ -86,6 +86,17 @@ header h1 span{color:var(--acc)}
 .rb .k button.cur{outline:4px solid #fff}
 #ril .foot{display:flex;gap:8px;margin-top:10px}
 #ril .foot button{flex:1;height:50px}
+#cd{position:fixed;inset:0;z-index:3100;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:calc(var(--safe-t) + 16px) 20px calc(var(--safe-b) + 20px);background:var(--bg);text-align:center;transition:background .3s}
+#cd.show{display:flex}
+#cd.V{background:#0c3b22}#cd.G{background:#4a3f0c}#cd.R{background:#3a1414}#cd.P{background:#4a2a0c}
+#cd .nome{font-size:18px;font-weight:700}
+#cd .lanterna{display:flex;flex-direction:column;gap:10px;background:#0a0f0c;padding:14px;border-radius:26px}
+#cd .lanterna span{width:54px;height:54px;border-radius:50%;background:#262b28}
+#cd .lanterna .R.on{background:var(--r);box-shadow:0 0 24px var(--r)}#cd .lanterna .G.on{background:var(--g);box-shadow:0 0 24px var(--g)}#cd .lanterna .V.on{background:var(--v);box-shadow:0 0 24px var(--v)}
+#cd .num{font-size:110px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+#cd .msg{font-size:22px;font-weight:700;min-height:30px}
+#cd .nota{font-size:13px;color:var(--mut);max-width:340px}
+#cd .bar2{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
 #toast{position:fixed;left:50%;top:calc(var(--safe-t) + 60px);transform:translateX(-50%);z-index:4000;background:#000c;padding:8px 14px;border-radius:10px;display:none;max-width:90vw;text-align:center}
 .mk{width:26px;height:26px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px #0009;display:grid;place-items:center;font-size:12px;font-weight:800;color:#000}
 .mk.nuovo{background:#9ca3af}.mk.incorso{background:var(--g)}.mk.risolto{background:var(--v)}.mk.dinamico{background:var(--dyn)}
@@ -119,6 +130,7 @@ pre.rep{white-space:pre-wrap;background:var(--bg);border-radius:10px;padding:10p
   <div class="bracci" id="rilBracci"></div>
   <div class="foot"><button class="dan" id="rilAbort">Scarta</button><button class="pri" id="rilEnd">Termina e salva</button></div>
 </div>
+<div id="cd"><div class="nome" id="cdNome"></div><div class="lanterna"><span class="R" id="cdR"></span><span class="G" id="cdG"></span><span class="V" id="cdV"></span></div><div class="num" id="cdNum"></div><div class="msg" id="cdMsg"></div><div class="nota">È una previsione: vale sempre e solo il segnale reale. Si parte e si attraversa solo col verde vero.</div><div class="bar2"><button id="cdVoce">Voce: spenta</button><button id="cdBraccio">Cambia braccio</button><button class="pri" id="cdChiudi">Chiudi</button></div></div>
 <div id="toast"></div>
 <input type="file" id="fileImp" accept="application/json,.json" hidden>
 
@@ -336,20 +348,32 @@ function formImpianto(id, pos){
   const rb = () => bracci.map((b,i)=>`<div class="braccio-ed"><input data-i="${i}" class="bn" value="${esc(b.nome)}" placeholder="es. da Firenze"><select data-i="${i}" class="bt"><option value="auto" ${b.tipo==='auto'?'selected':''}>🚗 auto</option><option value="pedoni" ${b.tipo==='pedoni'?'selected':''}>🚶 pedoni</option></select><button data-i="${i}" class="bx">✕</button></div>`).join('');
   const draw = () => {
     apriSheet(`<h2>${id?'Modifica impianto':'Nuovo impianto'}</h2>
-      <label>Nome</label><input id="fNome" value="${esc(s.nome)}">
-      <label>Zona / incrocio</label><input id="fZona" value="${esc(s.zona)}" placeholder="es. Viale dei Mille × Via Lorenzo il Magnifico">
+      <label>Nome del semaforo (dagli un nome simpatico!)</label><div class="row"><input id="fNome" value="${esc(s.nome)}" maxlength="40" style="flex:3"><button class="ghost" type="button" id="fSugg" style="flex:1">Suggerisci</button></div>
+      <label>Zona / incrocio</label><input id="fZona" value="${esc(s.zona)}" placeholder="es. Via A angolo Via B">
       <label>Bracci (ogni direzione di arrivo, o attraversamento pedonale)</label><div id="fBracci">${rb()}</div>
-      <button class="ghost" id="fAddB" style="margin-top:8px;width:100%">+ Aggiungi braccio</button>
+      <div class="btns" style="margin-top:8px"><button class="ghost" id="fAddB">+ Aggiungi braccio</button><button class="ghost" id="fAuto">Proponi i bracci dalla mappa</button></div>
+      <div class="mut" id="fAutoMsg" style="margin-top:6px"></div>
       <div class="btns"><button id="fAnn">Annulla</button><button class="pri" id="fOk">Salva</button></div>`);
     const sync = () => { document.querySelectorAll('.bn').forEach(e=>bracci[e.dataset.i].nome=e.value); document.querySelectorAll('.bt').forEach(e=>bracci[e.dataset.i].tipo=e.value); s.nome=document.getElementById('fNome').value; s.zona=document.getElementById('fZona').value; };
     document.getElementById('fAddB').onclick = () => { sync(); bracci.push({id:uid(),nome:'Braccio '+(bracci.length+1),tipo:'auto'}); draw(); };
+    document.getElementById('fSugg').onclick = () => { sync(); s.nome = nomeSimpatico(s.zona); document.getElementById('fNome').value = s.nome; };
+    const auto = async () => {
+      sync(); const msg = document.getElementById('fAutoMsg'); if(msg) msg.textContent = 'Cerco le strade che arrivano all\'incrocio…';
+      const r = await proponiBracci(s.lat, s.lng, pos && pos.ped);
+      if(!document.getElementById('fAutoMsg')) return;
+      if(!r){ document.getElementById('fAutoMsg').textContent = 'Strade non trovate o mappa non raggiungibile: scrivi tu i bracci.'; return; }
+      sync(); bracci = r.bracci; if(!s.zona.trim() && r.zona) s.zona = r.zona;
+      draw(); document.getElementById('fAutoMsg').textContent = 'Bracci proposti dalla mappa, in senso orario da nord: controllali e correggili.';
+    };
+    document.getElementById('fAuto').onclick = auto;
+    if(!id && !s._autoFatto){ s._autoFatto = true; auto(); }
     document.querySelectorAll('.bx').forEach(e=>e.onclick=()=>{ sync(); if(bracci.length>1){ bracci.splice(+e.dataset.i,1); draw(); } });
     document.getElementById('fAnn').onclick = () => id ? apriImpianto(id) : chiudiSheet();
     document.getElementById('fOk').onclick = () => {
       sync();
       if(!s.nome.trim()) return toast('Dai un nome all\'impianto');
       if(bracci.some(b=>!b.nome.trim())) return toast('Ogni braccio ha bisogno di un nome');
-      const rec = {...s, nome:s.nome.trim(), zona:s.zona.trim(), bracci, agg:Date.now()};
+      const rec = {...s, nome:s.nome.trim(), zona:s.zona.trim(), bracci, agg:Date.now()}; delete rec._autoFatto;
       if(id){ DB.semafori = DB.semafori.map(x=>x.id===id?rec:x); }
       else { rec.id=uid(); rec.creato=Date.now(); rec.autore=DB.autore||''; rec.autoreId=DB.uid; DB.semafori.push(rec); }
       save(); disegnaImpianti(); apriImpianto(rec.id);
@@ -394,11 +418,13 @@ function apriImpianto(id){
     segs.slice().sort((a,b)=>b.data-a.data).forEach(g => html += `<div class="row mut" style="margin-top:6px"><span>${g.chiusa?'✓':'❗'} ${esc(g.tipo)}<br>${fmtD(g.data)}</span><button class="ghost" data-sg="${g.id}" style="flex:0 0 auto">Apri</button></div>`);
     html += `</div>`;
   }
+  if(an) html += `<div class="btns"><button id="iCd">⏱ Conto alla rovescia</button></div>`;
   html += `<div class="btns"><button class="pri" id="iRil">▶ Inizia rilievo</button></div>
     <div class="btns"><button id="iSeg">❗ Segnala un problema</button><button id="iMod">Modifica</button></div>
     <div class="btns"><button class="dan" id="iDel">Elimina impianto</button></div>`;
   apriSheet(html);
   document.getElementById('iRil').onclick = () => { chiudiSheet(); avviaRilievo(id); };
+  if(an) document.getElementById('iCd').onclick = () => { chiudiSheet(); apriConto(id); };
   document.getElementById('iMod').onclick = () => formImpianto(id);
   document.getElementById('iSeg').onclick = () => formSegnalazione(id);
   document.querySelectorAll('[data-sg]').forEach(b=>b.onclick=()=>mostraSegnalazione(b.dataset.sg));
@@ -516,6 +542,98 @@ document.getElementById('rilEnd').onclick = () => {
     const st = statoImpianto(rilieviDi(id)).stato; if(st==='risolto') toast('🎉 Impianto risolto!');
   };
 };
+
+// ===================== BRACCI AUTOMATICI DA OPENSTREETMAP =====================
+const DIREZ = ['nord','nord-est','est','sud-est','sud','sud-ovest','ovest','nord-ovest'];
+function distM(a,b){ const k=Math.cos(a[0]*Math.PI/180); return Math.hypot((b[0]-a[0])*110540,(b[1]-a[1])*111320*k); }
+function rotta(a,b){ const k=Math.cos(a[0]*Math.PI/180); return mod(Math.atan2((b[1]-a[1])*k,(b[0]-a[0]))*180/Math.PI,360); }
+async function proponiBracci(lat, lng, ped){
+  const q = `[out:json][timeout:25];way(around:35,${lat},${lng})["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$"];out tags geom;`;
+  let j = null;
+  for(const url of OSM_SERVERS){
+    try{ const ctl=new AbortController(), to=setTimeout(()=>ctl.abort(),20000);
+      const r = await fetch(url,{method:'POST',body:'data='+encodeURIComponent(q),signal:ctl.signal}); clearTimeout(to);
+      if(r.ok){ j = await r.json(); break; } }catch(e){}
+  }
+  if(!j || !j.elements || !j.elements.length) return null;
+  const c = [lat,lng], rami = [];
+  j.elements.forEach(w => {
+    const g = (w.geometry||[]).map(p=>[p.lat,p.lon]); if(g.length<2) return;
+    let k=0, best=Infinity; g.forEach((p,i)=>{ const d=distM(c,p); if(d<best){best=d;k=i;} });
+    if(best>40) return;
+    const t = w.tags||{}, ow = t.oneway==='yes'||t.oneway==='1'||t.junction==='roundabout' ? 1 : (t.oneway==='-1' ? -1 : 0);
+    [[-1,'indietro'],[1,'avanti']].forEach(([dir]) => {
+      let i=k, acc=0, prev=g[k];
+      while(i+dir>=0 && i+dir<g.length && acc<25){ i+=dir; acc+=distM(prev,g[i]); prev=g[i]; }
+      if(acc<6) return;
+      // un ramo è un braccio d'arrivo se il traffico può andare verso l'incrocio
+      if(ow===1 && dir===1) return; if(ow===-1 && dir===-1) return;
+      rami.push({b:rotta(c,prev), nome:t.name||t.ref||'', tipo:t.highway});
+    });
+  });
+  if(!rami.length) return null;
+  const uniti = []; rami.forEach(r => { const u = uniti.find(x => Math.min(Math.abs(x.b-r.b),360-Math.abs(x.b-r.b))<30); if(u){ if(!u.nome && r.nome) u.nome=r.nome; } else uniti.push({...r}); });
+  uniti.sort((x,y)=>mod(x.b+22.5,360)-mod(y.b+22.5,360));   // in senso orario partendo da nord
+  const bracci = uniti.map((r,i) => ({id:uid(), tipo:'auto', nome:`${i+1} · da ${r.nome||'strada senza nome'} (${DIREZ[Math.round(r.b/45)%8]})`}));
+  const vicPed = ped || Object.values(osmCache).some(n => n.tags && n.tags.crossing && distM(c,[n.lat,n.lon])<45);
+  if(vicPed) bracci.push({id:uid(), tipo:'pedoni', nome:'Pedoni'});
+  const nomi = [...new Set(uniti.map(r=>r.nome).filter(Boolean))];
+  return {bracci, zona: nomi.slice(0,2).join(' angolo ')};
+}
+
+// ===================== NOMI SIMPATICI =====================
+const NOMI_SEM = ['Il Pigrone','Lampo','Il Rosso Eterno','Semaforino','Occhio Verde','Tic Tac','Il Guardiano','Verdolino','Il Ritardatario','Il Brontolone','La Lanterna','Il Saggio','Il Dormiglione','Scheggia','Il Timido','Re Giallo','Il Puntuale','Cucù'];
+function nomeSimpatico(zona){
+  const n = NOMI_SEM[Math.floor(Math.random()*NOMI_SEM.length)];
+  const via = (zona||'').split(/ angolo | × |,/)[0].trim();
+  return via ? `${n} di ${via}` : n;
+}
+
+// ===================== CONTO ALLA ROVESCIA =====================
+let CD = null;
+function apriConto(semId){
+  const s = DB.semafori.find(x=>x.id===semId); const st = statoImpianto(rilieviDi(semId));
+  if(!st.ultimo) return toast('Serve almeno un rilievo valido');
+  const an = st.ultimo.an, usabili = s.bracci.filter(b => previsione(an,b.id,Date.now()));
+  if(!usabili.length) return toast('Dati insufficienti per la previsione');
+  CD = {s, an, bracci:usabili, i:0, voce:CD?CD.voce:false, ultimo:null, timer:null};
+  document.getElementById('cd').classList.add('show'); tieniAcceso(true);
+  clearInterval(CD.timer); CD.timer = setInterval(tickConto, 200); tickConto();
+}
+function parla(t){ try{ if(!CD || !CD.voce || !window.speechSynthesis) return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(t); u.lang='it-IT'; speechSynthesis.speak(u); }catch(e){} }
+function tickConto(){
+  if(!CD) return;
+  const b = CD.bracci[CD.i], p = previsione(CD.an, b.id, Date.now()); if(!p) return;
+  const ped = b.tipo==='pedoni', lab = ped?COL_PED:COL, d = durate(CD.an,b.id)||{};
+  const s = Math.ceil(p.mancano), prep = p.colore==='R' && p.prossimo==='V' && p.mancano<=3;
+  const el = document.getElementById('cd');
+  el.className = 'show ' + (prep ? 'P' : p.colore);
+  document.getElementById('cdNome').textContent = CD.s.nome + ' · ' + b.nome;
+  document.getElementById('cdR').className = 'R' + (p.colore==='R' ? ' on' : '');
+  document.getElementById('cdG').className = 'G' + (p.colore==='G' || prep ? ' on' : '');
+  document.getElementById('cdV').className = 'V' + (p.colore==='V' ? ' on' : '');
+  document.getElementById('cdNum').textContent = s;
+  let msg;
+  if(prep) msg = ped ? 'Preparati ad attraversare' : 'Preparati: verde tra poco';
+  else if(p.colore==='V') msg = (ped?'Verde pedonale':'Verde') + ': cambia tra ' + s + ' s';
+  else msg = lab[p.colore] + ' · ' + lab[p.prossimo].toLowerCase() + ' tra ' + s + ' s';
+  document.getElementById('cdMsg').textContent = msg;
+  const fase = (prep?'P':p.colore);
+  if(CD.ultimo !== fase){
+    if(CD.ultimo !== null){
+      if(navigator.vibrate) navigator.vibrate(fase==='P'?[60,60,60]:120);
+      if(fase==='P') parla('Preparati');
+      else if(fase==='V') parla((ped?'Verde pedonale, ':'Verde, ') + 'dura circa ' + Math.round(d.V||p.mancano) + ' secondi');
+      else if(fase==='R') parla('Rosso. Verde tra ' + s + ' secondi');
+      else if(fase==='G') parla(ped?'Lampeggia, non iniziare ad attraversare':'Giallo');
+    }
+    CD.ultimo = fase;
+  }
+}
+function chiudiConto(){ if(CD){ clearInterval(CD.timer); const id=CD.s.id; CD=null; try{speechSynthesis.cancel();}catch(e){} document.getElementById('cd').className=''; tieniAcceso(false); apriImpianto(id); } }
+document.getElementById('cdChiudi').onclick = chiudiConto;
+document.getElementById('cdBraccio').onclick = () => { if(CD){ CD.i=(CD.i+1)%CD.bracci.length; CD.ultimo=null; tickConto(); } };
+document.getElementById('cdVoce').onclick = e => { if(!CD) return; CD.voce=!CD.voce; e.currentTarget.textContent='Voce: '+(CD.voce?'accesa':'spenta'); if(CD.voce) parla('Voce accesa'); };
 
 // ===================== SOPRANNOMI =====================
 const NOMI = ['Giglio','Lampione','Vigile','Cupola','Ponte','Tram','Leone','Marzocco','Campanile','Lanterna','Onda','Strisce','Grillo','Cinghiale'];
