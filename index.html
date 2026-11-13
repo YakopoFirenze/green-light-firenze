@@ -1,0 +1,534 @@
+<!-- test -->
+  riga2 {x}
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0f1512">
+<title>Green Light Firenze · Rilievi</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{
+  --bg:#0f1512; --panel:#18211c; --panel2:#212c26; --line:#2e3b34; --txt:#eef3ef; --mut:#93a39a;
+  --v:#22c55e; --g:#facc15; --r:#ef4444; --acc:#34d399; --dyn:#a78bfa; --warn:#fb923c;
+  --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+button{font:inherit;color:inherit;border:0;background:var(--panel2);border-radius:12px;padding:10px 14px;cursor:pointer}
+button.pri{background:var(--acc);color:#04241a;font-weight:700}
+button.dan{background:#3a1b1b;color:#fca5a5}
+button.ghost{background:transparent;border:1px solid var(--line)}
+input,select,textarea{font:inherit;color:var(--txt);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;width:100%}
+textarea{min-height:80px;resize:vertical}
+label{display:block;font-size:12px;color:var(--mut);margin:10px 0 4px}
+header{position:fixed;top:0;left:0;right:0;z-index:1500;padding:calc(var(--safe-t) + 8px) 12px 8px;display:flex;align-items:center;gap:10px;background:linear-gradient(var(--bg) 60%,transparent)}
+header h1{font-size:17px;margin:0;flex:1;letter-spacing:.2px}
+header h1 span{color:var(--acc)}
+#map{position:absolute;inset:0}
+.fabs{position:fixed;right:12px;bottom:calc(var(--safe-b) + 16px);z-index:1500;display:flex;flex-direction:column;gap:10px;align-items:flex-end}
+.fab{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;font-size:22px;background:var(--panel);box-shadow:0 4px 14px #0008;padding:0}
+.fab.big{width:62px;height:62px;background:var(--acc);color:#04241a;font-size:30px;font-weight:700}
+.fab.on{outline:2px solid var(--acc)}
+#legend{position:fixed;left:12px;bottom:calc(var(--safe-b) + 16px);z-index:1500;background:#18211ce6;border-radius:12px;padding:8px 10px;font-size:12px;color:var(--mut)}
+#legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 4px 0 8px;vertical-align:-1px}
+#legend i:first-child{margin-left:0}
+#banner{position:fixed;top:calc(var(--safe-t) + 56px);left:12px;right:12px;z-index:1600;background:var(--acc);color:#04241a;border-radius:12px;padding:10px 12px;font-weight:600;display:none;align-items:center;gap:10px}
+#banner.show{display:flex}
+#banner span{flex:1}
+#banner button{background:#04241a22;padding:6px 10px}
+.sheet-bg{position:fixed;inset:0;background:#0007;z-index:2000;display:none}
+.sheet-bg.show{display:block}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:2001;background:var(--panel);border-radius:18px 18px 0 0;max-height:86vh;overflow:auto;padding:14px 16px calc(var(--safe-b) + 18px);transform:translateY(105%);transition:transform .22s}
+.sheet.show{transform:none}
+.sheet h2{margin:2px 0 6px;font-size:20px}
+.sheet .grab{width:40px;height:5px;background:var(--line);border-radius:3px;margin:0 auto 10px}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.btns button{flex:1;min-width:120px}
+.chip{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700}
+.st-nuovo{background:#33403a;color:#cfd8d2}
+.st-incorso{background:#4a3f0c;color:#fde68a}
+.st-risolto{background:#0c3b22;color:#86efac}
+.st-dinamico{background:#2e2350;color:#c4b5fd}
+.mut{color:var(--mut);font-size:13px}
+.card{background:var(--panel2);border-radius:12px;padding:10px 12px;margin-top:8px}
+.braccio-ed{display:flex;gap:6px;margin-top:6px}
+.braccio-ed input{flex:2}.braccio-ed select{flex:1}.braccio-ed button{flex:0 0 42px;padding:0}
+.lamp{display:inline-block;width:14px;height:14px;border-radius:50%;background:#333;vertical-align:-2px;box-shadow:inset 0 0 0 2px #0004}
+.lamp.V{background:var(--v);box-shadow:0 0 10px var(--v)}
+.lamp.G{background:var(--g);box-shadow:0 0 10px var(--g)}
+.lamp.R{background:var(--r);box-shadow:0 0 10px var(--r)}
+.pred{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.pred:last-child{border:0}
+.pred b{flex:1}
+.pred .cd{font-variant-numeric:tabular-nums;font-size:22px;font-weight:700;min-width:64px;text-align:right}
+.bar{display:flex;height:10px;border-radius:5px;overflow:hidden;margin-top:6px}
+.bar div{height:100%}
+/* rilievo */
+#ril{position:fixed;inset:0;z-index:3000;background:var(--bg);display:none;flex-direction:column;padding:calc(var(--safe-t) + 10px) 12px calc(var(--safe-b) + 12px)}
+#ril.show{display:flex}
+#ril .top{display:flex;align-items:center;gap:10px}
+#ril .top h3{margin:0;flex:1;font-size:17px}
+#ril .clock{font-variant-numeric:tabular-nums;font-size:34px;font-weight:800;text-align:center;margin:8px 0 2px}
+#ril .est{text-align:center;color:var(--mut);font-size:14px;min-height:20px}
+#ril .bracci{flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.rb{background:var(--panel);border-radius:14px;padding:10px}
+.rb .h{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.rb .h b{flex:1}
+.rb .h .since{font-variant-numeric:tabular-nums;color:var(--mut)}
+.rb .k{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.rb .k button{height:68px;font-size:16px;font-weight:800;border-radius:14px;color:#111}
+.rb .k .V{background:var(--v)} .rb .k .G{background:var(--g)} .rb .k .R{background:var(--r);color:#fff}
+.rb .k button:active{transform:scale(.96);filter:brightness(1.2)}
+.rb .k button.cur{outline:4px solid #fff}
+#ril .foot{display:flex;gap:8px;margin-top:10px}
+#ril .foot button{flex:1;height:50px}
+#toast{position:fixed;left:50%;top:calc(var(--safe-t) + 60px);transform:translateX(-50%);z-index:4000;background:#000c;padding:8px 14px;border-radius:10px;display:none;max-width:90vw;text-align:center}
+.mk{width:26px;height:26px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px #0009;display:grid;place-items:center;font-size:12px;font-weight:800;color:#000}
+.mk.nuovo{background:#9ca3af}.mk.incorso{background:var(--g)}.mk.risolto{background:var(--v)}.mk.dinamico{background:var(--dyn)}
+.mk .seg{position:absolute;top:-8px;right:-8px;background:var(--r);color:#fff;border-radius:50%;width:16px;height:16px;font-size:11px;display:grid;place-items:center;border:2px solid #fff}
+.leaflet-container{background:#1b221e}
+.lb td{padding:6px 4px;border-bottom:1px solid var(--line)}
+.lb{width:100%;border-collapse:collapse}
+pre.rep{white-space:pre-wrap;background:var(--bg);border-radius:10px;padding:10px;font-size:13px;border:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Green Light <span>Firenze</span></h1>
+  <button id="bMenu" aria-label="Menu">☰</button>
+</header>
+<div id="map"></div>
+<div id="banner"><span>Tocca un semaforo grigio (OSM) o un punto della mappa dove si trova l'impianto</span><button id="bCancelPlace">Annulla</button></div>
+<div id="legend"><i style="background:#64748b"></i>OSM <i style="background:#9ca3af"></i>nuovo <i style="background:var(--g)"></i>in corso <i style="background:var(--v)"></i>risolto <i style="background:var(--dyn)"></i>dinamico</div>
+<div class="fabs">
+  <button class="fab" id="bOsm" title="Semafori OSM">🚦</button>
+  <button class="fab" id="bLoc" title="La mia posizione">◎</button>
+  <button class="fab big" id="bAdd" title="Nuovo impianto">+</button>
+</div>
+<div class="sheet-bg" id="sheetBg"></div>
+<div class="sheet" id="sheet"><div class="grab"></div><div id="sheetBody"></div></div>
+
+<div id="ril">
+  <div class="top"><h3 id="rilTitle"></h3><button id="rilUndo">↶ Annulla</button></div>
+  <div class="clock" id="rilClock">0:00</div>
+  <div class="est" id="rilEst">Tocca il colore appena cambia, per ogni braccio</div>
+  <div class="bracci" id="rilBracci"></div>
+  <div class="foot"><button class="dan" id="rilAbort">Scarta</button><button class="pri" id="rilEnd">Termina e salva</button></div>
+</div>
+<div id="toast"></div>
+<input type="file" id="fileImp" accept="application/json,.json" hidden>
+
+<script>
+// ===================== CORE (analisi, nessuna dipendenza dal DOM) =====================
+// CORE-START
+const COL = {V:'Verde', G:'Giallo', R:'Rosso'};
+const COL_PED = {V:'Verde', G:'Lampeggia', R:'Rosso'};
+const median = a => { if(!a.length) return NaN; const s=[...a].sort((x,y)=>x-y), m=s.length>>1; return s.length%2?s[m]:(s[m-1]+s[m])/2; };
+const mod = (a,n) => ((a%n)+n)%n;
+
+// Analizza un rilievo: durata del ciclo, fasi di ogni colore per ogni braccio
+function analizza(ril){
+  const ev = [...(ril.eventi||[])].sort((a,b)=>a.t-b.t);
+  if(ev.length<2) return {ok:false, nCicli:0};
+  const t0 = ev[0].t, by = {};
+  ev.forEach(e => (by[e.b+'|'+e.c] = by[e.b+'|'+e.c] || []).push(e.t));
+  const diffs = [];
+  Object.values(by).forEach(ts => { for(let i=1;i<ts.length;i++){ const d=(ts[i]-ts[i-1])/1000; if(d>=12) diffs.push(d); } });
+  if(diffs.length<2) return {ok:false, nCicli:diffs.length};
+  // stima robusta: un intervallo può coprire più cicli se un cambio è stato perso
+  let C = median(diffs);
+  const minD = Math.min(...diffs);
+  if(minD > 12 && C/minD > 1.6) C = minD;           // prevale il ciclo più corto plausibile
+  for(let k=0;k<3;k++){ C = median(diffs.map(d => d/Math.max(1,Math.round(d/C)))); }
+  const est = diffs.map(d => d/Math.max(1,Math.round(d/C)));
+  const spread = median(est.map(e=>Math.abs(e-C)));
+  const fasi = {};
+  Object.entries(by).forEach(([key,ts]) => {
+    const [b,c] = key.split('|');
+    let sx=0, sy=0;
+    ts.forEach(t => { const a = 2*Math.PI*mod((t-t0)/1000, C)/C; sx+=Math.cos(a); sy+=Math.sin(a); });
+    const ph = mod(Math.atan2(sy,sx)/(2*Math.PI)*C, C);
+    (fasi[b] = fasi[b] || {})[c] = ph;
+  });
+  const nCicli = Math.max(...Object.values(by).map(ts=>ts.length-1));
+  return {ok:true, C, spread, nCicli, t0, fasi};
+}
+
+// Durate di verde/giallo/rosso di un braccio, in secondi
+function durate(an, b){
+  const f = an.fasi[b]; if(!f) return null;
+  const ord = ['V','G','R'].filter(c => f[c]!==undefined).sort((x,y)=>f[x]-f[y]);
+  if(ord.length<2) return null;
+  const out = {};
+  ord.forEach((c,i) => { const n = ord[(i+1)%ord.length]; out[c] = mod(f[n]-f[c], an.C) || an.C; });
+  return out;
+}
+
+// Stato previsto di un braccio all'istante ms: colore e secondi al prossimo cambio
+function previsione(an, b, ms){
+  const f = an.fasi[b]; if(!f) return null;
+  const cs = Object.keys(f); if(cs.length<2) return null;
+  const p = mod((ms-an.t0)/1000, an.C);
+  let cur=null, best=Infinity, nxt=null, bestN=Infinity;
+  cs.forEach(c => { const back = mod(p-f[c], an.C); if(back<best){best=back;cur=c;} const fw = mod(f[c]-p, an.C) || an.C; if(fw<bestN){bestN=fw;nxt=c;} });
+  return {colore:cur, mancano:bestN, prossimo:nxt};
+}
+
+function fascia(ms){
+  const d=new Date(ms), h=d.getHours()+d.getMinutes()/60, dow=d.getDay(), we=(dow===0||dow===6);
+  if(h<6||h>=22) return 'notte';
+  if(!we && h>=7 && h<9.5) return 'punta mattina';
+  if(!we && h>=17 && h<19.5) return 'punta sera';
+  return we ? 'weekend' : 'giorno';
+}
+
+// Stato dell'impianto dai rilievi: nuovo / incorso / risolto / dinamico
+function statoImpianto(rilievi){
+  const val = rilievi.map(r => ({r, an:analizza(r)})).filter(x => x.an.ok);
+  if(!val.length) return {stato: rilievi.length ? 'incorso':'nuovo', val};
+  const Cs = val.map(x=>x.an.C), Cm = median(Cs);
+  const maxDev = Math.max(...Cs.map(c=>Math.abs(c-Cm)));
+  const maxSpread = Math.max(...val.map(x=>x.an.spread));
+  const autori = new Set(val.map(x=>x.r.autore||'?')).size;
+  const giorni = new Set(val.map(x=>new Date(x.r.inizio).toDateString())).size;
+  let stato = 'incorso';
+  if(maxSpread>3 || (val.length>=2 && maxDev>3)) stato = 'dinamico';
+  else if(val.length>=2 && maxDev<=1.5 && maxSpread<=1.5) stato = 'risolto';
+  const ultimo = val.reduce((a,b)=> b.r.inizio>a.r.inizio ? b : a);
+  return {stato, val, C:Cm, maxDev, maxSpread, autori, giorni, ultimo};
+}
+// CORE-END
+
+// ===================== STORAGE (locale, con esporta/importa) =====================
+const KEY = 'glf_v1';
+let DB = {semafori:[], rilievi:[], segnalazioni:[], autore:''};
+try { const s = JSON.parse(localStorage.getItem(KEY)||'null'); if(s) DB = Object.assign(DB, s); } catch(e){}
+const save = () => { try{ localStorage.setItem(KEY, JSON.stringify(DB)); }catch(e){ toast('Memoria piena o non disponibile'); } };
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const esc = s => String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const rilieviDi = id => DB.rilievi.filter(r=>r.semId===id);
+const segnDi = id => DB.segnalazioni.filter(s=>s.semId===id);
+const fmtS = s => s>=60 ? Math.floor(s/60)+':'+String(Math.round(s%60)).padStart(2,'0') : Math.round(s)+' s';
+const fmtD = ms => new Date(ms).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',2600); }
+
+// ===================== MAPPA =====================
+if(!window.L){
+  document.body.innerHTML = `<div style="padding:30px 20px;font-size:16px;line-height:1.5"><h2>Green Light Firenze</h2>
+  <p>La mappa non si è caricata. Questa pagina ha bisogno di internet e di essere aperta da un indirizzo web (GitHub Pages) in Safari o Chrome.</p>
+  <p style="color:#93a39a">Aperta dall'anteprima della chat o dall'app File, il browser blocca la mappa e i pulsanti.</p></div>`;
+  throw new Error('Leaflet non caricato');
+}
+const map = L.map('map',{zoomControl:false, attributionControl:true}).setView([43.7731,11.2560],15);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+const layOsm = L.layerGroup().addTo(map), layImp = L.layerGroup().addTo(map);
+let osmOn = true, osmCache = {}, osmTimer = null, placing = false, meMarker = null;
+
+function iconaImp(sem){
+  const st = statoImpianto(rilieviDi(sem.id)).stato;
+  const nSeg = segnDi(sem.id).filter(s=>!s.chiusa).length;
+  return L.divIcon({className:'', iconSize:[26,26], iconAnchor:[13,13],
+    html:`<div class="mk ${st}" style="position:relative">${sem.bracci.length}${nSeg?'<div class="seg">!</div>':''}</div>`});
+}
+function disegnaImpianti(){
+  layImp.clearLayers();
+  DB.semafori.forEach(s => L.marker([s.lat,s.lng],{icon:iconaImp(s), zIndexOffset:1000}).on('click',()=>apriImpianto(s.id)).addTo(layImp));
+  disegnaOsm();
+}
+function nodiAdottati(){ const set=new Set(); DB.semafori.forEach(s=>(s.osm||[]).forEach(id=>set.add(id))); return set; }
+function disegnaOsm(){
+  layOsm.clearLayers(); if(!osmOn || map.getZoom()<15) return;
+  const adottati = nodiAdottati();
+  Object.values(osmCache).forEach(n => {
+    if(adottati.has(n.id)) return;
+    L.circleMarker([n.lat,n.lon],{radius:6,color:'#fff',weight:1.5,fillColor:'#64748b',fillOpacity:.95})
+      .on('click',()=>osmClick(n)).addTo(layOsm);
+  });
+}
+async function caricaOsm(){
+  if(!osmOn || map.getZoom()<15) { disegnaOsm(); return; }
+  const b = map.getBounds().pad(.2);
+  const q = `[out:json][timeout:25];(node["highway"="traffic_signals"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});node["crossing"="traffic_signals"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}););out;`;
+  try{
+    const r = await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(q)});
+    const j = await r.json();
+    j.elements.forEach(e => osmCache[e.id] = {id:e.id, lat:e.lat, lon:e.lon, tags:e.tags||{}});
+    disegnaOsm();
+  }catch(e){ toast('Semafori OSM non raggiungibili ora'); }
+}
+map.on('moveend',()=>{ clearTimeout(osmTimer); osmTimer=setTimeout(caricaOsm,700); });
+document.getElementById('bOsm').classList.add('on');
+document.getElementById('bOsm').onclick = e => { osmOn=!osmOn; e.currentTarget.classList.toggle('on',osmOn); osmOn?caricaOsm():disegnaOsm(); toast(osmOn?'Semafori OSM visibili (da zoom 15)':'Semafori OSM nascosti'); };
+document.getElementById('bLoc').onclick = () => {
+  if(!navigator.geolocation) return toast('GPS non disponibile');
+  navigator.geolocation.getCurrentPosition(p => {
+    const ll=[p.coords.latitude,p.coords.longitude];
+    if(meMarker) meMarker.setLatLng(ll); else meMarker=L.circleMarker(ll,{radius:8,color:'#fff',weight:3,fillColor:'#3b82f6',fillOpacity:1}).addTo(map);
+    map.setView(ll, Math.max(map.getZoom(),17));
+  }, () => toast('Posizione non concessa'), {enableHighAccuracy:true, timeout:10000});
+};
+
+// ---- piazzamento nuovo impianto
+function setPlacing(on){ placing=on; document.getElementById('banner').classList.toggle('show',on); }
+document.getElementById('bAdd').onclick = () => { if(map.getZoom()<16) map.setZoom(17); setPlacing(true); };
+document.getElementById('bCancelPlace').onclick = () => setPlacing(false);
+map.on('click', e => { if(placing){ setPlacing(false); formImpianto(null,{lat:e.latlng.lat,lng:e.latlng.lng,osm:[]}); } });
+function osmClick(n){
+  // raccoglie i nodi OSM vicini (stesso incrocio, entro 60 m)
+  const vicini = Object.values(osmCache).filter(m => map.distance([n.lat,n.lon],[m.lat,m.lon])<=60).map(m=>m.id);
+  if(placing){ setPlacing(false); }
+  const lat = Object.values(osmCache).filter(m=>vicini.includes(m.id)).reduce((a,m)=>a+m.lat,0)/vicini.length;
+  const lng = Object.values(osmCache).filter(m=>vicini.includes(m.id)).reduce((a,m)=>a+m.lon,0)/vicini.length;
+  apriSheet(`<h2>Semaforo da risolvere</h2>
+    <div class="mut">Nodo OpenStreetMap ${n.id}${vicini.length>1?` · ${vicini.length} lanterne mappate in questo incrocio`:''}${n.tags.crossing?' · attraversamento pedonale':''}</div>
+    <div class="btns"><button class="pri" id="bAdopt">Adotta e crea impianto</button></div>`);
+  document.getElementById('bAdopt').onclick = () => formImpianto(null,{lat,lng,osm:vicini, ped:!!n.tags.crossing});
+}
+
+// ===================== SHEET =====================
+const sheet = document.getElementById('sheet'), sheetBg = document.getElementById('sheetBg');
+let predTimer = null;
+function apriSheet(html){ document.getElementById('sheetBody').innerHTML = html; sheet.classList.add('show'); sheetBg.classList.add('show'); sheet.scrollTop=0; }
+function chiudiSheet(){ sheet.classList.remove('show'); sheetBg.classList.remove('show'); clearInterval(predTimer); }
+sheetBg.onclick = chiudiSheet;
+
+// ---- form impianto
+function formImpianto(id, pos){
+  const s = id ? DB.semafori.find(x=>x.id===id) : {nome:'', zona:'', bracci: pos.ped ? [{id:uid(),nome:'Auto',tipo:'auto'},{id:uid(),nome:'Pedoni',tipo:'pedoni'}] : [{id:uid(),nome:'Braccio 1',tipo:'auto'},{id:uid(),nome:'Braccio 2',tipo:'auto'}], ...pos};
+  let bracci = s.bracci.map(b=>({...b}));
+  const rb = () => bracci.map((b,i)=>`<div class="braccio-ed"><input data-i="${i}" class="bn" value="${esc(b.nome)}" placeholder="es. da Firenze"><select data-i="${i}" class="bt"><option value="auto" ${b.tipo==='auto'?'selected':''}>🚗 auto</option><option value="pedoni" ${b.tipo==='pedoni'?'selected':''}>🚶 pedoni</option></select><button data-i="${i}" class="bx">✕</button></div>`).join('');
+  const draw = () => {
+    apriSheet(`<h2>${id?'Modifica impianto':'Nuovo impianto'}</h2>
+      <label>Nome</label><input id="fNome" value="${esc(s.nome)}" placeholder="es. Africo 1, Strettoia Fiesole">
+      <label>Zona / incrocio</label><input id="fZona" value="${esc(s.zona)}" placeholder="es. Viale dei Mille × Via Lorenzo il Magnifico">
+      <label>Bracci (ogni direzione di arrivo, o attraversamento pedonale)</label><div id="fBracci">${rb()}</div>
+      <button class="ghost" id="fAddB" style="margin-top:8px;width:100%">+ Aggiungi braccio</button>
+      <div class="btns"><button id="fAnn">Annulla</button><button class="pri" id="fOk">Salva</button></div>`);
+    const sync = () => { document.querySelectorAll('.bn').forEach(e=>bracci[e.dataset.i].nome=e.value); document.querySelectorAll('.bt').forEach(e=>bracci[e.dataset.i].tipo=e.value); s.nome=document.getElementById('fNome').value; s.zona=document.getElementById('fZona').value; };
+    document.getElementById('fAddB').onclick = () => { sync(); bracci.push({id:uid(),nome:'Braccio '+(bracci.length+1),tipo:'auto'}); draw(); };
+    document.querySelectorAll('.bx').forEach(e=>e.onclick=()=>{ sync(); if(bracci.length>1){ bracci.splice(+e.dataset.i,1); draw(); } });
+    document.getElementById('fAnn').onclick = () => id ? apriImpianto(id) : chiudiSheet();
+    document.getElementById('fOk').onclick = () => {
+      sync();
+      if(!s.nome.trim()) return toast('Dai un nome all\'impianto');
+      if(bracci.some(b=>!b.nome.trim())) return toast('Ogni braccio ha bisogno di un nome');
+      const rec = {...s, nome:s.nome.trim(), zona:s.zona.trim(), bracci, agg:Date.now()};
+      if(id){ DB.semafori = DB.semafori.map(x=>x.id===id?rec:x); }
+      else { rec.id=uid(); rec.creato=Date.now(); rec.autore=DB.autore||''; DB.semafori.push(rec); }
+      save(); disegnaImpianti(); apriImpianto(rec.id);
+    };
+  };
+  draw();
+}
+
+// ---- scheda impianto
+const ST_LABEL = {nuovo:'Da rilevare', incorso:'Rilievi in corso', risolto:'Risolto', dinamico:'Dinamico / da verificare'};
+function apriImpianto(id){
+  const s = DB.semafori.find(x=>x.id===id); if(!s) return;
+  const rils = rilieviDi(id), st = statoImpianto(rils), segs = segnDi(id);
+  const an = st.ultimo ? st.ultimo.an : null;
+  let html = `<h2>${esc(s.nome)}</h2><div class="mut">${esc(s.zona||'')}</div>
+    <div style="margin-top:8px"><span class="chip st-${st.stato}">${ST_LABEL[st.stato]}</span>
+    ${st.C?` <span class="mut">· ciclo ${st.C.toFixed(1)} s · ${st.val.length} rilievi validi · ${st.autori} rilevator${st.autori>1?'i':'e'}</span>`:''}</div>`;
+  if(st.stato==='dinamico') html += `<div class="card mut">I tempi cambiano da un rilievo all'altro: probabilmente è un impianto attuato (spire, pulsante pedonale, priorità tram) o con piani orari diversi. La previsione qui sotto è solo indicativa.</div>`;
+  if(st.stato==='incorso' && st.val.length===1) html += `<div class="card mut">Serve un secondo rilievo, meglio un altro giorno o da un'altra persona, per confermare il ciclo.</div>`;
+  if(an){
+    const age = (Date.now()-st.ultimo.r.inizio)/3600000;
+    html += `<div class="card"><div class="row"><b>Previsione</b><span class="mut" style="text-align:right">dal rilievo di ${age<1?'meno di un\'ora':age<48?Math.round(age)+' ore':Math.round(age/24)+' giorni'} fa</span></div><div id="preds"></div>
+      <div class="mut" style="margin-top:6px">⚠︎ È una previsione: vale sempre e solo il segnale reale del semaforo.</div></div>`;
+  }
+  html += `<div class="card"><b>Bracci</b>`;
+  s.bracci.forEach(b => {
+    const d = an ? durate(an,b.id) : null, lab = b.tipo==='pedoni'?COL_PED:COL;
+    html += `<div style="margin-top:8px">${b.tipo==='pedoni'?'🚶':'🚗'} ${esc(b.nome)}`;
+    if(d){ const tot=an.C; html += ` <span class="mut">· ${Object.entries(d).map(([c,v])=>lab[c]+' '+fmtS(v)).join(' · ')}</span>
+      <div class="bar">${['V','G','R'].filter(c=>d[c]).map(c=>`<div style="width:${d[c]/tot*100}%;background:var(--${c.toLowerCase()})"></div>`).join('')}</div>`; }
+    html += `</div>`;
+  });
+  html += `</div>`;
+  if(rils.length){
+    html += `<div class="card"><b>Rilievi</b>`;
+    rils.slice().sort((a,b)=>b.inizio-a.inizio).forEach(r => { const a=analizza(r);
+      html += `<div class="row mut" style="margin-top:6px"><span>${fmtD(r.inizio)} · ${esc(r.fascia||fascia(r.inizio))}<br>${esc(r.autore||'anonimo')}</span><span style="text-align:right">${a.ok?'ciclo '+a.C.toFixed(1)+' s<br>±'+a.spread.toFixed(1)+' s':'troppo corto'}</span></div>`; });
+    html += `</div>`;
+  }
+  if(segs.length){
+    html += `<div class="card"><b>Segnalazioni</b>`;
+    segs.slice().sort((a,b)=>b.data-a.data).forEach(g => html += `<div class="row mut" style="margin-top:6px"><span>${g.chiusa?'✓':'❗'} ${esc(g.tipo)}<br>${fmtD(g.data)}</span><button class="ghost" data-sg="${g.id}" style="flex:0 0 auto">Apri</button></div>`);
+    html += `</div>`;
+  }
+  html += `<div class="btns"><button class="pri" id="iRil">▶ Inizia rilievo</button></div>
+    <div class="btns"><button id="iSeg">❗ Segnala un problema</button><button id="iMod">Modifica</button></div>
+    <div class="btns"><button class="dan" id="iDel">Elimina impianto</button></div>`;
+  apriSheet(html);
+  document.getElementById('iRil').onclick = () => { chiudiSheet(); avviaRilievo(id); };
+  document.getElementById('iMod').onclick = () => formImpianto(id);
+  document.getElementById('iSeg').onclick = () => formSegnalazione(id);
+  document.querySelectorAll('[data-sg]').forEach(b=>b.onclick=()=>mostraSegnalazione(b.dataset.sg));
+  document.getElementById('iDel').onclick = () => {
+    const btn = document.getElementById('iDel');
+    if(!btn.dataset.ok){ btn.dataset.ok=1; btn.textContent='Tocca di nuovo per eliminare anche i rilievi'; return; }
+    DB.semafori = DB.semafori.filter(x=>x.id!==id); DB.rilievi = DB.rilievi.filter(r=>r.semId!==id); DB.segnalazioni = DB.segnalazioni.filter(g=>g.semId!==id);
+    save(); disegnaImpianti(); chiudiSheet();
+  };
+  if(an){
+    const tick = () => { const el=document.getElementById('preds'); if(!el) return clearInterval(predTimer);
+      el.innerHTML = s.bracci.map(b => { const p = previsione(an,b.id,Date.now()); if(!p) return `<div class="pred"><span class="lamp"></span><b>${esc(b.nome)}</b><span class="mut">dati insufficienti</span></div>`;
+        const lab = b.tipo==='pedoni'?COL_PED:COL;
+        return `<div class="pred"><span class="lamp ${p.colore}"></span><b>${esc(b.nome)}<br><span class="mut">${lab[p.colore]} → ${lab[p.prossimo]}</span></b><span class="cd">${Math.ceil(p.mancano)} s</span></div>`; }).join(''); };
+    clearInterval(predTimer); tick(); predTimer = setInterval(tick, 250);
+  }
+}
+
+// ===================== SEGNALAZIONI =====================
+const TIPI_SEG = ['Semaforo spento o guasto','Giallo lampeggiante fisso','Lanterna bruciata o non visibile','Verde in conflitto con un altro braccio','Tempo pedonale troppo breve per attraversare','Segnale acustico per non vedenti assente o guasto','Pulsante pedonale non funziona','Tempi cambiati / ciclo anomalo','Altro'];
+function formSegnalazione(semId){
+  const s = DB.semafori.find(x=>x.id===semId);
+  apriSheet(`<h2>Segnala un problema</h2><div class="mut">${esc(s.nome)}</div>
+    <label>Tipo di problema</label><select id="sgTipo">${TIPI_SEG.map(t=>`<option>${t}</option>`).join('')}</select>
+    <label>Braccio interessato</label><select id="sgBr"><option value="">Tutto l'impianto</option>${s.bracci.map(b=>`<option value="${b.id}">${esc(b.nome)}</option>`).join('')}</select>
+    <label>Cosa hai visto</label><textarea id="sgDesc" placeholder="Descrivi con calma: cosa succede, quando, se si ripete"></textarea>
+    <label><input type="checkbox" id="sgPos" style="width:auto"> Allega la mia posizione GPS attuale</label>
+    <div class="btns"><button id="sgAnn">Annulla</button><button class="pri" id="sgOk">Crea segnalazione</button></div>`);
+  document.getElementById('sgAnn').onclick = () => apriImpianto(semId);
+  document.getElementById('sgOk').onclick = () => {
+    const g = {id:uid(), semId, tipo:document.getElementById('sgTipo').value, braccio:document.getElementById('sgBr').value, desc:document.getElementById('sgDesc').value.trim(), data:Date.now(), autore:DB.autore||'', chiusa:false};
+    const fine = () => { DB.segnalazioni.push(g); save(); disegnaImpianti(); mostraSegnalazione(g.id); };
+    if(document.getElementById('sgPos').checked && navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(p=>{ g.pos={lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy}; fine(); }, fine, {enableHighAccuracy:true,timeout:8000});
+    } else fine();
+  };
+}
+function testoSegnalazione(g){
+  const s = DB.semafori.find(x=>x.id===g.semId), br = s.bracci.find(b=>b.id===g.braccio);
+  const st = statoImpianto(rilieviDi(s.id));
+  let t = `SEGNALAZIONE IMPIANTO SEMAFORICO\n\nImpianto: ${s.nome}\nLuogo: ${s.zona||'-'}\nCoordinate impianto: ${s.lat.toFixed(6)}, ${s.lng.toFixed(6)}\nhttps://www.openstreetmap.org/?mlat=${s.lat.toFixed(6)}&mlon=${s.lng.toFixed(6)}#map=19/${s.lat.toFixed(6)}/${s.lng.toFixed(6)}\n`;
+  if(br) t += `Braccio: ${br.nome} (${br.tipo==='pedoni'?'attraversamento pedonale':'veicoli'})\n`;
+  t += `\nProblema: ${g.tipo}\nOsservato il: ${fmtD(g.data)}\n`;
+  if(g.desc) t += `\nDescrizione:\n${g.desc}\n`;
+  if(g.pos) t += `\nPosizione del segnalante: ${g.pos.lat.toFixed(6)}, ${g.pos.lng.toFixed(6)} (±${Math.round(g.pos.acc)} m)\n`;
+  if(st.ultimo){ const an = st.ultimo.an;
+    t += `\nTempi rilevati (rilievo del ${fmtD(st.ultimo.r.inizio)}): ciclo ${an.C.toFixed(1)} s`;
+    s.bracci.forEach(b => { const d=durate(an,b.id); if(d){ const lab=b.tipo==='pedoni'?COL_PED:COL; t += `\n - ${b.nome}: ${Object.entries(d).map(([c,v])=>lab[c]+' '+v.toFixed(1)+' s').join(', ')}`; } });
+    t += `\n`;
+  }
+  t += `\nSegnalato con Green Light Firenze${g.autore?' da '+g.autore:''}.`;
+  return t;
+}
+function mostraSegnalazione(gid){
+  const g = DB.segnalazioni.find(x=>x.id===gid); const txt = testoSegnalazione(g);
+  apriSheet(`<h2>Segnalazione</h2><div class="mut">Testo pronto da inviare all'ufficio competente del Comune o alla Polizia Municipale. In caso di pericolo immediato chiama i numeri di emergenza.</div>
+    <pre class="rep">${esc(txt)}</pre>
+    <div class="btns"><button class="pri" id="sgShare">Condividi / invia</button><button id="sgCopy">Copia testo</button></div>
+    <div class="btns"><button id="sgClose">${g.chiusa?'Riapri':'Segna come risolta'}</button><button id="sgBack">Torna all'impianto</button></div>`);
+  document.getElementById('sgCopy').onclick = async () => { try{ await navigator.clipboard.writeText(txt); toast('Testo copiato'); }catch(e){ toast('Copia non riuscita: seleziona il testo a mano'); } };
+  document.getElementById('sgShare').onclick = async () => { if(navigator.share){ try{ await navigator.share({title:'Segnalazione semaforo: '+g.tipo, text:txt}); }catch(e){} } else { document.getElementById('sgCopy').click(); } };
+  document.getElementById('sgClose').onclick = () => { g.chiusa=!g.chiusa; save(); disegnaImpianti(); mostraSegnalazione(gid); };
+  document.getElementById('sgBack').onclick = () => apriImpianto(g.semId);
+}
+
+// ===================== RILIEVO =====================
+let R = null, rilTimer = null, wake = null;
+async function tieniAcceso(on){ try{ if(on && 'wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); else if(wake){ await wake.release(); wake=null; } }catch(e){} }
+function avviaRilievo(semId){
+  const s = DB.semafori.find(x=>x.id===semId);
+  R = {id:uid(), semId, inizio:Date.now(), eventi:[], autore:DB.autore||''};
+  document.getElementById('rilTitle').textContent = s.nome;
+  document.getElementById('rilBracci').innerHTML = s.bracci.map(b => { const lab=b.tipo==='pedoni'?COL_PED:COL;
+    return `<div class="rb" data-b="${b.id}"><div class="h"><span class="lamp" id="lp-${b.id}"></span><b>${b.tipo==='pedoni'?'🚶':'🚗'} ${esc(b.nome)}</b><span class="since" id="sn-${b.id}"></span></div>
+    <div class="k">${['V','G','R'].map(c=>`<button class="${c}" data-b="${b.id}" data-c="${c}">${lab[c].toUpperCase()}</button>`).join('')}</div></div>`; }).join('');
+  document.querySelectorAll('#rilBracci .k button').forEach(btn => btn.addEventListener('pointerdown', ev => { ev.preventDefault(); tocca(btn.dataset.b, btn.dataset.c); }));
+  document.getElementById('ril').classList.add('show');
+  tieniAcceso(true); clearInterval(rilTimer); rilTimer = setInterval(aggRil, 200); aggRil();
+}
+function ultimoDi(b){ for(let i=R.eventi.length-1;i>=0;i--) if(R.eventi[i].b===b) return R.eventi[i]; return null; }
+function tocca(b,c){
+  const u = ultimoDi(b), t = Date.now();
+  if(u && u.c===c && t-u.t<4000) return;               // doppio tocco accidentale
+  R.eventi.push({b,c,t});
+  if(navigator.vibrate) navigator.vibrate(30);
+  aggRil();
+}
+function aggRil(){
+  if(!R) return;
+  const el = (Date.now()-R.inizio)/1000;
+  document.getElementById('rilClock').textContent = Math.floor(el/60)+':'+String(Math.floor(el%60)).padStart(2,'0');
+  const an = analizza(R);
+  document.getElementById('rilEst').textContent = an.ok ? `Ciclo stimato ${an.C.toFixed(1)} s (±${an.spread.toFixed(1)}) · ${an.nCicli} cicli misurati — ne bastano 3-4` : `${R.eventi.length} cambi registrati · servono almeno 2 cicli completi`;
+  const s = DB.semafori.find(x=>x.id===R.semId);
+  s.bracci.forEach(b => { const u=ultimoDi(b.id); const lp=document.getElementById('lp-'+b.id), sn=document.getElementById('sn-'+b.id);
+    lp.className = 'lamp'+(u?' '+u.c:''); sn.textContent = u ? Math.floor((Date.now()-u.t)/1000)+' s' : '';
+    document.querySelectorAll(`#rilBracci .k button[data-b="${b.id}"]`).forEach(x=>x.classList.toggle('cur', !!u && x.dataset.c===u.c)); });
+}
+document.getElementById('rilUndo').onclick = () => { if(R && R.eventi.length){ R.eventi.pop(); aggRil(); toast('Ultimo tocco annullato'); } };
+function chiudiRil(){ clearInterval(rilTimer); document.getElementById('ril').classList.remove('show'); tieniAcceso(false); }
+document.getElementById('rilAbort').onclick = () => { const b=document.getElementById('rilAbort'); if(!b.dataset.ok && R.eventi.length){ b.dataset.ok=1; b.textContent='Sicuro? Tocca ancora'; setTimeout(()=>{b.textContent='Scarta';delete b.dataset.ok;},3000); return; } delete b.dataset.ok; b.textContent='Scarta'; const id=R.semId; R=null; chiudiRil(); apriImpianto(id); };
+document.getElementById('rilEnd').onclick = () => {
+  if(R.eventi.length<3) return toast('Troppo pochi cambi: continua ancora un po\'');
+  R.fine = Date.now(); R.fascia = fascia(R.inizio);
+  const an = analizza(R);
+  chiudiRil();
+  apriSheet(`<h2>Salva rilievo</h2><div class="mut">${R.eventi.length} cambi · ${an.ok?'ciclo '+an.C.toFixed(1)+' s':'ciclo non ancora stimabile (salvo comunque)'} · fascia ${R.fascia}</div>
+    <label>Il tuo nome (per la classifica)</label><input id="svNome" value="${esc(DB.autore)}" placeholder="es. Jacopo">
+    <label>Note</label><textarea id="svNote" placeholder="es. tram in transito, pulsante pedonale premuto, traffico intenso"></textarea>
+    <div class="btns"><button class="pri" id="svOk">Salva</button></div>`);
+  document.getElementById('svOk').onclick = () => {
+    DB.autore = document.getElementById('svNome').value.trim(); R.autore = DB.autore; R.note = document.getElementById('svNote').value.trim();
+    DB.rilievi.push(R); const id=R.semId; R=null; save(); disegnaImpianti(); apriImpianto(id);
+    const st = statoImpianto(rilieviDi(id)).stato; if(st==='risolto') toast('🎉 Impianto risolto!');
+  };
+};
+
+// ===================== MENU: classifica, esporta, importa =====================
+function classifica(){
+  const P = {};
+  const add = (a,k,n=1) => { a=a||'anonimo'; P[a]=P[a]||{ril:0,ris:0,seg:0,imp:0}; P[a][k]+=n; };
+  DB.rilievi.forEach(r => { if(analizza(r).ok) add(r.autore,'ril'); });
+  DB.semafori.forEach(s => { add(s.autore,'imp'); const st=statoImpianto(rilieviDi(s.id)); if(st.stato==='risolto') new Set(st.val.map(x=>x.r.autore||'anonimo')).forEach(a=>add(a,'ris')); });
+  DB.segnalazioni.forEach(g => add(g.autore,'seg'));
+  return Object.entries(P).map(([n,p])=>({n,...p,punti:p.ril*10+p.ris*50+p.imp*5+p.seg*5})).sort((a,b)=>b.punti-a.punti);
+}
+document.getElementById('bMenu').onclick = () => {
+  const nImp=DB.semafori.length, nRis=DB.semafori.filter(s=>statoImpianto(rilieviDi(s.id)).stato==='risolto').length;
+  const cl = classifica();
+  apriSheet(`<h2>Green Light Firenze</h2><div class="mut">${nImp} impianti · ${nRis} risolti · ${DB.rilievi.length} rilievi · ${DB.segnalazioni.filter(g=>!g.chiusa).length} segnalazioni aperte</div>
+    <div class="card"><b>Classifica</b><div class="mut">10 punti per rilievo valido, 50 per ogni impianto risolto a cui hai contribuito, 5 per impianto creato o segnalazione</div>
+    ${cl.length?`<table class="lb">${cl.map((p,i)=>`<tr><td>${i+1}.</td><td>${esc(p.n)}</td><td class="mut">${p.ril} ril · ${p.ris} ris</td><td style="text-align:right"><b>${p.punti}</b></td></tr>`).join('')}</table>`:'<div class="mut" style="margin-top:6px">Ancora nessun rilievo.</div>'}</div>
+    <div class="card"><b>Condividi i rilievi</b><div class="mut">Esporta il file e mandalo agli amici; loro lo importano e le mappe si uniscono (nessun doppione).</div>
+    <div class="btns"><button id="mExp">Esporta</button><button id="mImp">Importa</button></div></div>
+    <label>Il tuo nome</label><input id="mNome" value="${esc(DB.autore)}" placeholder="es. Jacopo">
+    <div class="btns"><button class="pri" id="mOk">Chiudi</button></div>`);
+  document.getElementById('mOk').onclick = () => { DB.autore=document.getElementById('mNome').value.trim(); save(); chiudiSheet(); };
+  document.getElementById('mExp').onclick = esporta;
+  document.getElementById('mImp').onclick = () => document.getElementById('fileImp').click();
+};
+async function esporta(){
+  const data = JSON.stringify({app:'green-light-firenze', v:1, esportato:Date.now(), semafori:DB.semafori, rilievi:DB.rilievi, segnalazioni:DB.segnalazioni});
+  const nome = `rilievi-semafori-${(DB.autore||'firenze').toLowerCase().replace(/\W+/g,'-')}-${new Date().toISOString().slice(0,10)}.json`;
+  const file = new File([data], nome, {type:'application/json'});
+  if(navigator.canShare && navigator.canShare({files:[file]})){ try{ await navigator.share({files:[file], title:'Rilievi semafori'}); return; }catch(e){ if(e.name==='AbortError') return; } }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = nome; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+}
+document.getElementById('fileImp').onchange = async e => {
+  const f = e.target.files[0]; e.target.value=''; if(!f) return;
+  try{
+    const j = JSON.parse(await f.text()); if(j.app!=='green-light-firenze') throw 0;
+    let nS=0,nR=0,nG=0;
+    (j.semafori||[]).forEach(s => { const i=DB.semafori.findIndex(x=>x.id===s.id); if(i<0){DB.semafori.push(s);nS++;} else if((s.agg||0)>(DB.semafori[i].agg||0)) DB.semafori[i]=s; });
+    const ids = new Set(DB.rilievi.map(r=>r.id)); (j.rilievi||[]).forEach(r => { if(!ids.has(r.id)){DB.rilievi.push(r);nR++;} });
+    const gids = new Set(DB.segnalazioni.map(g=>g.id)); (j.segnalazioni||[]).forEach(g => { if(!gids.has(g.id)){DB.segnalazioni.push(g);nG++;} });
+    save(); disegnaImpianti(); chiudiSheet(); toast(`Importati ${nS} impianti, ${nR} rilievi, ${nG} segnalazioni`);
+  }catch(err){ toast('File non valido'); }
+};
+
+disegnaImpianti(); caricaOsm();
+</script>
+</body>
+</html>
