@@ -102,10 +102,10 @@ pre.rep{white-space:pre-wrap;background:var(--bg);border-radius:10px;padding:10p
   <button id="bMenu" aria-label="Menu">☰</button>
 </header>
 <div id="map"></div>
-<div id="banner"><span>Tocca un semaforo grigio (OSM) o un punto della mappa dove si trova l'impianto</span><button id="bCancelPlace">Annulla</button></div>
-<div id="legend"><i style="background:#64748b"></i>OSM <i style="background:#9ca3af"></i>nuovo <i style="background:var(--g)"></i>in corso <i style="background:var(--v)"></i>risolto <i style="background:var(--dyn)"></i>dinamico</div>
+<div id="banner"><span>Tocca un semaforo grigio da adottare o un punto della mappa dove si trova l'impianto</span><button id="bCancelPlace">Annulla</button></div>
+<div id="legend"><i style="background:#64748b"></i>da adottare <i style="background:#9ca3af"></i>nuovo <i style="background:var(--g)"></i>in corso <i style="background:var(--v)"></i>risolto <i style="background:var(--dyn)"></i>dinamico</div>
 <div class="fabs">
-  <button class="fab" id="bOsm" title="Semafori OSM">🚦</button>
+  <button class="fab" id="bOsm" title="Semafori da adottare">🚦</button>
   <button class="fab" id="bLoc" title="La mia posizione">◎</button>
   <button class="fab big" id="bAdd" title="Nuovo impianto">+</button>
 </div>
@@ -193,7 +193,7 @@ function statoImpianto(rilievi){
   const Cs = val.map(x=>x.an.C), Cm = median(Cs);
   const maxDev = Math.max(...Cs.map(c=>Math.abs(c-Cm)));
   const maxSpread = Math.max(...val.map(x=>x.an.spread));
-  const autori = new Set(val.map(x=>x.r.autore||'?')).size;
+  const autori = new Set(val.map(x=>x.r.autoreId||x.r.autore||'?')).size;
   const giorni = new Set(val.map(x=>new Date(x.r.inizio).toDateString())).size;
   let stato = 'incorso';
   if(maxSpread>3 || (val.length>=2 && maxDev>3)) stato = 'dinamico';
@@ -209,6 +209,7 @@ let DB = {semafori:[], rilievi:[], segnalazioni:[], autore:''};
 try { const s = JSON.parse(localStorage.getItem(KEY)||'null'); if(s) DB = Object.assign(DB, s); } catch(e){}
 const save = () => { try{ localStorage.setItem(KEY, JSON.stringify(DB)); }catch(e){ toast('Memoria piena o non disponibile'); } };
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+if(!DB.uid){ DB.uid = 'u'+uid(); save(); }   // codice anonimo del telefono: distingue chi ha lo stesso soprannome
 const esc = s => String(s??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rilieviDi = id => DB.rilievi.filter(r=>r.semId===id);
 const segnDi = id => DB.segnalazioni.filter(s=>s.semId===id);
@@ -243,27 +244,58 @@ function disegnaImpianti(){
 function nodiAdottati(){ const set=new Set(); DB.semafori.forEach(s=>(s.osm||[]).forEach(id=>set.add(id))); return set; }
 function disegnaOsm(){
   layOsm.clearLayers(); if(!osmOn || map.getZoom()<15) return;
-  const adottati = nodiAdottati();
+  const adottati = nodiAdottati(), vis = map.getBounds().pad(.3);
   Object.values(osmCache).forEach(n => {
-    if(adottati.has(n.id)) return;
+    if(adottati.has(n.id) || !vis.contains([n.lat,n.lon])) return;
     L.circleMarker([n.lat,n.lon],{radius:6,color:'#fff',weight:1.5,fillColor:'#64748b',fillOpacity:.95})
       .on('click',()=>osmClick(n)).addTo(layOsm);
   });
 }
-async function caricaOsm(){
-  if(!osmOn || map.getZoom()<15) { disegnaOsm(); return; }
-  const b = map.getBounds().pad(.2);
-  const q = `[out:json][timeout:25];(node["highway"="traffic_signals"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});node["crossing"="traffic_signals"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}););out;`;
-  try{
-    const r = await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(q)});
-    const j = await r.json();
-    j.elements.forEach(e => osmCache[e.id] = {id:e.id, lat:e.lat, lon:e.lon, tags:e.tags||{}});
-    disegnaOsm();
-  }catch(e){ toast('Semafori OSM non raggiungibili ora'); }
+// Semafori da adottare: tutta l'area di Firenze scaricata una volta da OpenStreetMap
+// e conservata sul telefono per 30 giorni; server di riserva se il principale è carico.
+const OSM_KEY = 'glf_osm_v1', OSM_TTL = 30*24*3600*1000;
+const OSM_BBOX = '43.70,11.12,43.85,11.40';   // Firenze, Fiesole, Sesto, Bagno a Ripoli, Compiobbi
+const OSM_SERVERS = ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'];
+let osmLoading = false, osmRetry = null;
+function osmDaMemoria(){
+  try{ const s = JSON.parse(localStorage.getItem(OSM_KEY)||'null'); if(!s || !s.n) return null; return s; }catch(e){ return null; }
 }
-map.on('moveend',()=>{ clearTimeout(osmTimer); osmTimer=setTimeout(caricaOsm,700); });
+function osmUsa(lista){ osmCache = {}; lista.forEach(([id,lat,lon,c]) => osmCache[id] = {id, lat, lon, tags: c ? {crossing:'traffic_signals'} : {}}); disegnaOsm(); }
+async function osmScarica(){
+  const q = `[out:json][timeout:90];(node["highway"="traffic_signals"](${OSM_BBOX});node["crossing"="traffic_signals"](${OSM_BBOX}););out;`;
+  for(const url of OSM_SERVERS){
+    try{
+      const ctl = new AbortController(), to = setTimeout(()=>ctl.abort(), 45000);
+      const r = await fetch(url,{method:'POST',body:'data='+encodeURIComponent(q),signal:ctl.signal});
+      clearTimeout(to);
+      if(!r.ok) continue;
+      const j = await r.json();
+      if(!j.elements || !j.elements.length) continue;
+      return j.elements.map(e => [e.id, +e.lat.toFixed(6), +e.lon.toFixed(6), e.tags && e.tags.crossing==='traffic_signals' ? 1 : 0]);
+    }catch(e){ /* prova il server successivo */ }
+  }
+  return null;
+}
+async function caricaOsm(forza){
+  const mem = osmDaMemoria();
+  if(mem){ if(!Object.keys(osmCache).length) osmUsa(mem.n); if(!forza && Date.now()-mem.t < OSM_TTL) return; }
+  if(osmLoading) return;
+  osmLoading = true;
+  if(!mem) toast('Scarico i semafori di Firenze…');
+  const lista = await osmScarica();
+  osmLoading = false;
+  if(lista){
+    osmUsa(lista);
+    try{ localStorage.setItem(OSM_KEY, JSON.stringify({t:Date.now(), n:lista})); }catch(e){}
+    if(!mem || forza) toast(lista.length+' semafori da adottare caricati');
+  } else if(!mem){
+    toast('Semafori da adottare non raggiungibili ora: riprovo tra un minuto');
+    clearTimeout(osmRetry); osmRetry = setTimeout(()=>caricaOsm(), 60000);
+  }
+}
+map.on('moveend',()=>{ clearTimeout(osmTimer); osmTimer=setTimeout(disegnaOsm,150); });
 document.getElementById('bOsm').classList.add('on');
-document.getElementById('bOsm').onclick = e => { osmOn=!osmOn; e.currentTarget.classList.toggle('on',osmOn); osmOn?caricaOsm():disegnaOsm(); toast(osmOn?'Semafori OSM visibili (da zoom 15)':'Semafori OSM nascosti'); };
+document.getElementById('bOsm').onclick = e => { osmOn=!osmOn; e.currentTarget.classList.toggle('on',osmOn); disegnaOsm(); toast(osmOn?'Semafori da adottare visibili (avvicina la mappa)':'Semafori da adottare nascosti'); };
 document.getElementById('bLoc').onclick = () => {
   if(!navigator.geolocation) return toast('GPS non disponibile');
   navigator.geolocation.getCurrentPosition(p => {
@@ -304,7 +336,7 @@ function formImpianto(id, pos){
   const rb = () => bracci.map((b,i)=>`<div class="braccio-ed"><input data-i="${i}" class="bn" value="${esc(b.nome)}" placeholder="es. da Firenze"><select data-i="${i}" class="bt"><option value="auto" ${b.tipo==='auto'?'selected':''}>🚗 auto</option><option value="pedoni" ${b.tipo==='pedoni'?'selected':''}>🚶 pedoni</option></select><button data-i="${i}" class="bx">✕</button></div>`).join('');
   const draw = () => {
     apriSheet(`<h2>${id?'Modifica impianto':'Nuovo impianto'}</h2>
-      <label>Nome</label><input id="fNome" value="${esc(s.nome)}" placeholder="es. Africo 1, Strettoia Fiesole">
+      <label>Nome</label><input id="fNome" value="${esc(s.nome)}">
       <label>Zona / incrocio</label><input id="fZona" value="${esc(s.zona)}" placeholder="es. Viale dei Mille × Via Lorenzo il Magnifico">
       <label>Bracci (ogni direzione di arrivo, o attraversamento pedonale)</label><div id="fBracci">${rb()}</div>
       <button class="ghost" id="fAddB" style="margin-top:8px;width:100%">+ Aggiungi braccio</button>
@@ -319,7 +351,7 @@ function formImpianto(id, pos){
       if(bracci.some(b=>!b.nome.trim())) return toast('Ogni braccio ha bisogno di un nome');
       const rec = {...s, nome:s.nome.trim(), zona:s.zona.trim(), bracci, agg:Date.now()};
       if(id){ DB.semafori = DB.semafori.map(x=>x.id===id?rec:x); }
-      else { rec.id=uid(); rec.creato=Date.now(); rec.autore=DB.autore||''; DB.semafori.push(rec); }
+      else { rec.id=uid(); rec.creato=Date.now(); rec.autore=DB.autore||''; rec.autoreId=DB.uid; DB.semafori.push(rec); }
       save(); disegnaImpianti(); apriImpianto(rec.id);
     };
   };
@@ -397,7 +429,7 @@ function formSegnalazione(semId){
     <div class="btns"><button id="sgAnn">Annulla</button><button class="pri" id="sgOk">Crea segnalazione</button></div>`);
   document.getElementById('sgAnn').onclick = () => apriImpianto(semId);
   document.getElementById('sgOk').onclick = () => {
-    const g = {id:uid(), semId, tipo:document.getElementById('sgTipo').value, braccio:document.getElementById('sgBr').value, desc:document.getElementById('sgDesc').value.trim(), data:Date.now(), autore:DB.autore||'', chiusa:false};
+    const g = {id:uid(), semId, tipo:document.getElementById('sgTipo').value, braccio:document.getElementById('sgBr').value, desc:document.getElementById('sgDesc').value.trim(), data:Date.now(), autore:DB.autore||'', autoreId:DB.uid, chiusa:false};
     const fine = () => { DB.segnalazioni.push(g); save(); disegnaImpianti(); mostraSegnalazione(g.id); };
     if(document.getElementById('sgPos').checked && navigator.geolocation){
       navigator.geolocation.getCurrentPosition(p=>{ g.pos={lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy}; fine(); }, fine, {enableHighAccuracy:true,timeout:8000});
@@ -437,7 +469,7 @@ let R = null, rilTimer = null, wake = null;
 async function tieniAcceso(on){ try{ if(on && 'wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); else if(wake){ await wake.release(); wake=null; } }catch(e){} }
 function avviaRilievo(semId){
   const s = DB.semafori.find(x=>x.id===semId);
-  R = {id:uid(), semId, inizio:Date.now(), eventi:[], autore:DB.autore||''};
+  R = {id:uid(), semId, inizio:Date.now(), eventi:[], autore:DB.autore||'', autoreId:DB.uid};
   document.getElementById('rilTitle').textContent = s.nome;
   document.getElementById('rilBracci').innerHTML = s.bracci.map(b => { const lab=b.tipo==='pedoni'?COL_PED:COL;
     return `<div class="rb" data-b="${b.id}"><div class="h"><span class="lamp" id="lp-${b.id}"></span><b>${b.tipo==='pedoni'?'🚶':'🚗'} ${esc(b.nome)}</b><span class="since" id="sn-${b.id}"></span></div>
@@ -474,24 +506,37 @@ document.getElementById('rilEnd').onclick = () => {
   const an = analizza(R);
   chiudiRil();
   apriSheet(`<h2>Salva rilievo</h2><div class="mut">${R.eventi.length} cambi · ${an.ok?'ciclo '+an.C.toFixed(1)+' s':'ciclo non ancora stimabile (salvo comunque)'} · fascia ${R.fascia}</div>
-    <label>Il tuo nome (per la classifica)</label><input id="svNome" value="${esc(DB.autore)}" placeholder="es. Jacopo">
+    ${campoSoprannome('svNome')}
     <label>Note</label><textarea id="svNote" placeholder="es. tram in transito, pulsante pedonale premuto, traffico intenso"></textarea>
     <div class="btns"><button class="pri" id="svOk">Salva</button></div>`);
+  attivaSoprannome();
   document.getElementById('svOk').onclick = () => {
-    DB.autore = document.getElementById('svNome').value.trim(); R.autore = DB.autore; R.note = document.getElementById('svNote').value.trim();
+    DB.autore = leggiSoprannome('svNome'); R.autore = DB.autore; R.note = document.getElementById('svNote').value.trim();
     DB.rilievi.push(R); const id=R.semId; R=null; save(); disegnaImpianti(); apriImpianto(id);
     const st = statoImpianto(rilieviDi(id)).stato; if(st==='risolto') toast('🎉 Impianto risolto!');
   };
 };
 
+// ===================== SOPRANNOMI =====================
+const NOMI = ['Giglio','Lampione','Vigile','Cupola','Ponte','Tram','Leone','Marzocco','Campanile','Lanterna','Onda','Strisce','Grillo','Cinghiale'];
+const AGG = ['Verde','Paziente','Gentile','Saggio','Tranquillo','Attento','Fluido','Sereno','Curioso','Puntuale'];
+function soprannome(){ const r=a=>a[Math.floor(Math.random()*a.length)]; return r(NOMI)+' '+r(AGG)+' '+(10+Math.floor(Math.random()*90)); }
+function campoSoprannome(id){
+  return `<label>Il tuo soprannome (per la classifica: niente nome e cognome)</label>
+    <div class="row"><input id="${id}" value="${esc(DB.autore)}" placeholder="es. Giglio Paziente 27" maxlength="24" style="flex:3"><button class="ghost" type="button" data-sopr="${id}" style="flex:1">Suggerisci</button></div>`;
+}
+function attivaSoprannome(){ document.querySelectorAll('[data-sopr]').forEach(b => b.onclick = () => { document.getElementById(b.dataset.sopr).value = soprannome(); }); }
+const leggiSoprannome = id => (document.getElementById(id).value.trim().slice(0,24)) || soprannome();
+
 // ===================== MENU: classifica, esporta, importa =====================
 function classifica(){
   const P = {};
-  const add = (a,k,n=1) => { a=a||'anonimo'; P[a]=P[a]||{ril:0,ris:0,seg:0,imp:0}; P[a][k]+=n; };
-  DB.rilievi.forEach(r => { if(analizza(r).ok) add(r.autore,'ril'); });
-  DB.semafori.forEach(s => { add(s.autore,'imp'); const st=statoImpianto(rilieviDi(s.id)); if(st.stato==='risolto') new Set(st.val.map(x=>x.r.autore||'anonimo')).forEach(a=>add(a,'ris')); });
-  DB.segnalazioni.forEach(g => add(g.autore,'seg'));
-  return Object.entries(P).map(([n,p])=>({n,...p,punti:p.ril*10+p.ris*50+p.imp*5+p.seg*5})).sort((a,b)=>b.punti-a.punti);
+  const chi = o => o.autoreId || ('n:'+(o.autore||'anonimo'));
+  const add = (o,k) => { const id=chi(o); P[id]=P[id]||{n:o.autore||'anonimo',ril:0,ris:0,seg:0,imp:0}; if(o.autore) P[id].n=o.autore; P[id][k]++; };
+  DB.rilievi.forEach(r => { if(analizza(r).ok) add(r,'ril'); });
+  DB.semafori.forEach(s => { add(s,'imp'); const st=statoImpianto(rilieviDi(s.id)); if(st.stato==='risolto'){ const visti=new Set(); st.val.forEach(x=>{ const id=chi(x.r); if(!visti.has(id)){ visti.add(id); add(x.r,'ris'); } }); } });
+  DB.segnalazioni.forEach(g => add(g,'seg'));
+  return Object.values(P).map(p=>({...p,punti:p.ril*10+p.ris*50+p.imp*5+p.seg*5})).sort((a,b)=>b.punti-a.punti);
 }
 document.getElementById('bMenu').onclick = () => {
   const nImp=DB.semafori.length, nRis=DB.semafori.filter(s=>statoImpianto(rilieviDi(s.id)).stato==='risolto').length;
@@ -501,9 +546,12 @@ document.getElementById('bMenu').onclick = () => {
     ${cl.length?`<table class="lb">${cl.map((p,i)=>`<tr><td>${i+1}.</td><td>${esc(p.n)}</td><td class="mut">${p.ril} ril · ${p.ris} ris</td><td style="text-align:right"><b>${p.punti}</b></td></tr>`).join('')}</table>`:'<div class="mut" style="margin-top:6px">Ancora nessun rilievo.</div>'}</div>
     <div class="card"><b>Condividi i rilievi</b><div class="mut">Esporta il file e mandalo agli amici; loro lo importano e le mappe si uniscono (nessun doppione).</div>
     <div class="btns"><button id="mExp">Esporta</button><button id="mImp">Importa</button></div></div>
-    <label>Il tuo nome</label><input id="mNome" value="${esc(DB.autore)}" placeholder="es. Jacopo">
+    ${campoSoprannome('mNome')}
+    <div class="btns"><button id="mOsm">Aggiorna i semafori da adottare</button></div>
     <div class="btns"><button class="pri" id="mOk">Chiudi</button></div>`);
-  document.getElementById('mOk').onclick = () => { DB.autore=document.getElementById('mNome').value.trim(); save(); chiudiSheet(); };
+  attivaSoprannome();
+  document.getElementById('mOsm').onclick = () => { caricaOsm(true); toast('Aggiorno i semafori…'); };
+  document.getElementById('mOk').onclick = () => { DB.autore=leggiSoprannome('mNome'); save(); chiudiSheet(); };
   document.getElementById('mExp').onclick = esporta;
   document.getElementById('mImp').onclick = () => document.getElementById('fileImp').click();
 };
@@ -526,7 +574,8 @@ document.getElementById('fileImp').onchange = async e => {
   }catch(err){ toast('File non valido'); }
 };
 
-disegnaImpianti(); caricaOsm();
+disegnaImpianti();
+setTimeout(()=>{ map.invalidateSize(); caricaOsm(); }, 400);
 </script>
 </body>
 </html>
